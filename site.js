@@ -91,11 +91,26 @@ function results(d) {
 
 function stats(d) {
   const n = d.stats.length; const cats = d.categories; const gp = d.stats.some((r) => r.games > 0); // manual seasons may not record games played
-  return sec('stats', `Week ${d.week} stats`, 'Each stat with its rank among all teams in brackets (1 is best; fewer turnovers is better).', tbl(
-    ['#', { t: 'Team', l: true }, ...(gp ? ['GP'] : []), ...cats, 'Avg rank', { t: 'Opponent', l: true }, 'Result'],
-    d.stats.map((r) => [td(h('b', r.overall_rank)), td(team(r.manager, null, true), 'l'), ...(gp ? [td(r.games)] : []), ...cats.map((c) => h('td', { style: heat(r.ranks[c], n) }, fmt(c, r.values[c]), h('small', `${r.ranks[c]}`))),
-      td(h('b', r.avg_rank.toFixed(2))), td(r.opponent || '–', 'l'),
-      td(r.score ? h('span', { class: `chip ${r.score[0] > r.score[1] ? 'win' : r.score[0] < r.score[1] ? 'loss' : 'tie'}` }, `${r.score[0]}-${r.score[1]}-${r.score[2]}`) : '–')]), { cls: 'dense' }), true);
+  const lower = new Set(d.lower_is_better);
+  const cols = [
+    { t: '#', asc: true, get: (r) => r.overall_rank, cell: (r) => td(h('b', r.overall_rank)) },
+    { t: 'Team', l: true, get: (r) => r.manager.toLowerCase(), asc: true, cell: (r) => td(team(r.manager, null, true), 'l') },
+    ...(gp ? [{ t: 'GP', get: (r) => r.games, cell: (r) => td(r.games) }] : []),
+    ...cats.map((c) => ({ t: c, get: (r) => r.values[c], asc: lower.has(c), cell: (r) => h('td', { style: heat(r.ranks[c], n) }, fmt(c, r.values[c]), h('small', `${r.ranks[c]}`)) })),
+    { t: 'Avg rank', get: (r) => r.avg_rank, asc: true, cell: (r) => td(h('b', r.avg_rank.toFixed(2))) },
+    { t: 'Opponent', l: true, get: (r) => (r.opponent || '').toLowerCase(), asc: true, cell: (r) => td(r.opponent || '–', 'l') },
+    { t: 'Result', get: (r) => (r.score ? r.score[0] - r.score[1] : -99), cell: (r) => td(r.score ? h('span', { class: `chip ${r.score[0] > r.score[1] ? 'win' : r.score[0] < r.score[1] ? 'loss' : 'tie'}` }, `${r.score[0]}-${r.score[1]}-${r.score[2]}`) : '–') }];
+  let key = 0; let dir = 1; // the first column (overall rank) is the default order
+  const head = h('tr'); const body = h('tbody');
+  const draw = () => {
+    const col = cols[key];
+    const rows = [...d.stats].sort((x, y) => { const p = col.get(x); const q = col.get(y); return dir * (p < q ? -1 : p > q ? 1 : 0) || x.overall_rank - y.overall_rank; });
+    body.replaceChildren(...rows.map((r) => h('tr', cols.map((c) => c.cell(r)))));
+    [...head.children].forEach((th, i) => { th.classList.toggle('sorted', i === key); th.dataset.dir = i === key ? (dir === 1 ? 'asc' : 'desc') : ''; th.setAttribute('aria-sort', i === key ? (dir === 1 ? 'ascending' : 'descending') : 'none'); });
+  };
+  cols.forEach((c, i) => head.append(h('th', { class: `sortable ${c.l ? 'l' : ''}`, tabindex: 0, title: 'Sort by this column', onclick: () => { if (key === i) dir = -dir; else { key = i; dir = c.asc ? 1 : -1; } draw(); } }, c.t)));
+  draw();
+  return sec('stats', `Week ${d.week} stats`, 'Each stat with its rank among all teams in brackets (1 is best; fewer turnovers is better). Tap a column heading to sort.', h('div', { class: 'scroll dense' }, h('table', h('thead', head), body)), true);
 }
 
 function matrix(d) {

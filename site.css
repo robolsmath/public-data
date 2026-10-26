@@ -125,3 +125,10 @@ footer { text-align: center; color: var(--ink-3); font-size: 12.5px; padding: 10
 .tile { background: var(--fill); border-radius: 16px; padding: 14px 16px; } .tile small { display: block; color: var(--ink-2); font-size: 12.5px; margin-bottom: 4px; } .tile b { font-size: 17px; letter-spacing: -.01em; }
 .note { color: var(--ink-2); font-size: 13px; margin: 10px 4px 0; }
 .note { margin-bottom: 26px; }
+
+/* sortable week stats */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; } th.sortable:hover { color: var(--ink); }
+th.sorted { color: var(--ink); } th.sorted::after { content: ' ↑'; font-size: 11px; } th.sorted[data-dir="desc"]::after { content: ' ↓'; }
+/* the category winner in the tap-to-open breakdowns */
+.mt tr.detail table td.w { color: var(--pos); font-weight: 700; }
+.mt tr.detail table td.w small { color: inherit; opacity: .8; }
