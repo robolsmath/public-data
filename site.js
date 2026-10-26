@@ -68,18 +68,25 @@ function standings(d) {
       td(team(r.manager, r.team), 'l'), td(`${r.cw}-${r.cl}-${r.ct}`), td(h('b', num(r.points, 1))), td(num(r.gb, 1)), td(`${r.mw}-${r.ml}-${r.md}`)]), { cut: d.week <= d.regular_season_end ? d.playoff_teams : null }), true);
 }
 
+// One simple table for both results and the forecast: team | score (click for the category detail) | team.
+function matchTable(rows) {
+  const body = h('tbody');
+  for (const r of rows) {
+    const detail = h('tr', { class: 'detail', hidden: true }, h('td', { colspan: 3 }, h('table', h('tbody', r.detail))));
+    const btn = h('button', { class: 'scorebtn', 'aria-expanded': 'false', title: 'Show category breakdown', onclick: () => { detail.hidden = !detail.hidden; btn.setAttribute('aria-expanded', String(!detail.hidden)); } }, r.mid, h('i', { class: 'chev' }));
+    body.append(h('tr', h('td', { class: `side ${r.a.dim ? 'dim' : ''}` }, h('b', r.a.name), r.a.sub ? h('small', r.a.sub) : null), h('td', { class: 'mid' }, btn),
+      h('td', { class: `side r ${r.b.dim ? 'dim' : ''}` }, h('b', r.b.name), r.b.sub ? h('small', r.b.sub) : null)), detail);
+  }
+  return h('div', { class: 'mt' }, h('table', body));
+}
+const catRow = (left, mid, right, lw, rw, sub) => h('tr', h('td', { class: lw ? 'w' : '' }, left), h('td', { class: 'cat' }, mid, sub ? h('small', sub) : null), h('td', { class: rw ? 'w' : '' }, right));
+
 function results(d) {
   if (!d.results.length) return null;
-  const card = (m) => {
-    const aw = m.winner === 'a'; const bw = m.winner === 'b';
-    return h('div', { class: 'match' },
-      h('div', { class: 'row' }, h('div', { class: aw || !m.winner ? '' : 'loser' }, team(m.a.manager, m.a.team)),
-        h('div', { class: 'score' }, h('b', m.a.cats, h('i', '–'), m.b.cats), m.ties ? h('small', `${m.ties} tied`) : null),
-        h('div', { class: `r ${bw || !m.winner ? '' : 'loser'}` }, team(m.b.manager, m.b.team))),
-      h('details', h('summary', 'Category breakdown'), h('table', h('tbody', m.cats.map((c) => h('tr',
-        h('td', { class: c.w === 1 ? 'w' : '' }, fmt(c.cat, c.a)), h('td', { class: 'mid' }, c.cat), h('td', { class: c.w === -1 ? 'w' : '' }, fmt(c.cat, c.b))))))));
-  };
-  return sec('results', 'Match results', 'Each matchup is decided by categories won, out of nine.', h('div', { class: 'grid' }, d.results.map(card)));
+  return sec('results', 'Match results', 'Tap a score to see the nine categories.', matchTable(d.results.map((m) => ({
+    a: { name: m.a.manager, sub: m.a.team, dim: m.winner === 'b' }, b: { name: m.b.manager, sub: m.b.team, dim: m.winner === 'a' },
+    mid: `${m.a.cats}–${m.b.cats}${m.ties ? '–' + m.ties : ''}`,
+    detail: m.cats.map((c) => catRow(fmt(c.cat, c.a), c.cat, fmt(c.cat, c.b), c.w === 1, c.w === -1)) }))));
 }
 
 function stats(d) {
@@ -101,14 +108,11 @@ function matrix(d) {
 }
 
 function forecast(d) {
-  const f = d.forecast; if (!f) return null;
-  const card = (m) => h('div', { class: 'match' },
-    h('div', { class: 'row' }, h('div', team(m.a)), h('div', { class: 'score' }, h('b', m.expected[0].toFixed(1), h('i', '–'), m.expected[1].toFixed(1)), h('small', 'expected categories')), h('div', { class: 'r' }, team(m.b))),
-    h('div', { class: 'prob' }, h('i', { class: 'pa', style: `width:${m.p_a * 100}%` }), h('i', { class: 'pt', style: `width:${m.p_tie * 100}%` }), h('i', { class: 'pb', style: `width:${m.p_b * 100}%` })),
-    h('div', { class: 'plabels' }, h('b', pct(m.p_a)), h('small', m.p_tie >= 0.005 ? `tie ${pct(m.p_tie)}` : ''), h('b', pct(m.p_b))),
-    h('details', h('summary', 'Category by category'), h('table', h('tbody', d.categories.map((c) => { const x = m.cats[c]; return h('tr',
-      h('td', { class: x.p_a > 0.5 ? 'w' : '' }, fmt(c, x.a)), h('td', { class: 'mid' }, c, h('div', { style: 'font-size:11px' }, `${pct(x.p_a)} · ${pct(1 - x.p_a)}`)), h('td', { class: x.p_a < 0.5 ? 'w' : '' }, fmt(c, x.b))); })))));
-  return sec('forecast', `Fearless Forecast: week ${f.week}`, 'Monte Carlo from the weeks played so far. Schedules, injuries and lineup changes are not factored in.', h('div', { class: 'grid' }, f.matchups.map(card)));
+  const f = d.forecast; if (!f || d.week < 3) return null;
+  return sec('forecast', `Fearless Forecast: week ${f.week}`, 'Win chance for each matchup, from the weeks played so far. Tap the expected score for each category. Schedules and injuries are not factored in.', matchTable(f.matchups.map((m) => ({
+    a: { name: m.a, sub: pct(m.p_a), dim: m.p_a < m.p_b }, b: { name: m.b, sub: pct(m.p_b), dim: m.p_b < m.p_a },
+    mid: `${m.expected[0].toFixed(1)}–${m.expected[1].toFixed(1)}`,
+    detail: d.categories.map((c) => { const x = m.cats[c]; return catRow(fmt(c, x.a), c, fmt(c, x.b), x.p_a > 0.5, x.p_a < 0.5, `${pct(x.p_a)} · ${pct(1 - x.p_a)}`); }) }))));
 }
 
 function awards(d) {
@@ -118,7 +122,7 @@ function awards(d) {
 }
 
 function projections(d) {
-  const p = d.projections; if (!p || d.week < 4) return null;
+  const p = d.projections; if (!p || d.week <= 10) return null;
   const body = h('div'); let mode = 'full';
   const draw = () => {
     const rows = (mode === 'recent' && p.recent) ? p.recent : p.full;
@@ -156,8 +160,8 @@ async function show() {
   const [first, ...rest] = (data.counter.headline || `Week ${state.week}`).split(/(?<=!)\s+/);
   const dates = data.dates.start ? `${new Date(data.dates.start + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(data.dates.end + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : null;
   const parts = [
-    [md ? 'review' : null, 'Week in review'], [data.forecast ? 'forecast' : null, 'Forecast'], ['standings', 'Standings'], [data.results.length ? 'results' : null, 'Results'], ['stats', 'Stats'], ['matrix', 'Head-to-head'], ['awards', 'Awards'],
-    [data.projections && data.week >= 4 ? 'projections' : null, 'Projections'], [data.picture && (data.picture.final || data.picture.weeks_left <= 6) ? 'picture' : null, 'Playoffs']].filter((x) => x[0]);
+    [md ? 'review' : null, 'Week in review'], [data.forecast && data.week >= 3 ? 'forecast' : null, 'Forecast'], ['standings', 'Standings'], [data.results.length ? 'results' : null, 'Results'], ['stats', 'Stats'], ['matrix', 'Head-to-head'], ['awards', 'Awards'],
+    [data.projections && data.week > 10 ? 'projections' : null, 'Projections'], [data.picture && (data.picture.final || data.picture.weeks_left <= 6) ? 'picture' : null, 'Playoffs']].filter((x) => x[0]);
   const page = h('div', { class: 'page' },
     h('div', { class: 'hero' }, h('p', { class: 'eyebrow' }, `${seasonEntry.label} · Week ${state.week}${dates ? ' · ' + dates : ''}`),
       h('h1', first, rest.length ? [' ', h('span', rest.join(' '))] : null),
