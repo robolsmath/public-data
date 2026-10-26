@@ -90,10 +90,10 @@ function results(d) {
 }
 
 function stats(d) {
-  const n = d.stats.length; const cats = d.categories;
+  const n = d.stats.length; const cats = d.categories; const gp = d.stats.some((r) => r.games > 0); // manual seasons may not record games played
   return sec('stats', `Week ${d.week} stats`, 'Each stat with its rank among all teams in brackets (1 is best; fewer turnovers is better).', tbl(
-    ['#', { t: 'Team', l: true }, 'GP', ...cats, 'Avg rank', { t: 'Opponent', l: true }, 'Result'],
-    d.stats.map((r) => [td(h('b', r.overall_rank)), td(team(r.manager, null, true), 'l'), td(r.games), ...cats.map((c) => h('td', { style: heat(r.ranks[c], n) }, fmt(c, r.values[c]), h('small', `${r.ranks[c]}`))),
+    ['#', { t: 'Team', l: true }, ...(gp ? ['GP'] : []), ...cats, 'Avg rank', { t: 'Opponent', l: true }, 'Result'],
+    d.stats.map((r) => [td(h('b', r.overall_rank)), td(team(r.manager, null, true), 'l'), ...(gp ? [td(r.games)] : []), ...cats.map((c) => h('td', { style: heat(r.ranks[c], n) }, fmt(c, r.values[c]), h('small', `${r.ranks[c]}`))),
       td(h('b', r.avg_rank.toFixed(2))), td(r.opponent || '–', 'l'),
       td(r.score ? h('span', { class: `chip ${r.score[0] > r.score[1] ? 'win' : r.score[0] < r.score[1] ? 'loss' : 'tie'}` }, `${r.score[0]}-${r.score[1]}-${r.score[2]}`) : '–')]), { cls: 'dense' }), true);
 }
@@ -107,11 +107,21 @@ function matrix(d) {
       td(h('b', `${m.totals[i][0]}-${m.totals[i][1]}-${m.totals[i][2]}`))]), { cls: 'hm' }), true);
 }
 
+// Whole-number expected score: round a, b and the expected ties together so they still add up to the nine categories.
+function wholeScore(m) {
+  const raw = [m.expected[0], m.expected[1], Math.max(9 - m.expected[0] - m.expected[1], 0)];
+  const out = raw.map(Math.floor); let left = 9 - out.reduce((x, y) => x + y, 0);
+  const fav = m.p_a >= m.p_b ? 0 : 1; // equal remainders go to the favourite
+  const order = [0, 1, 2].sort((i, j) => (raw[j] - out[j]) - (raw[i] - out[i]) || (i === fav ? -1 : j === fav ? 1 : i - j));
+  for (const i of order) { if (left <= 0) break; out[i] += 1; left -= 1; }
+  return out;
+}
+
 function forecast(d) {
   const f = d.forecast; if (!f || d.week < 3) return null;
-  return sec('forecast', `Fearless Forecast: week ${f.week}`, 'Win chance for each matchup, from the weeks played so far. Tap the expected score for each category. Schedules and injuries are not factored in.', matchTable(f.matchups.map((m) => ({
+  return sec('forecast', `Fearless Forecast: week ${f.week}`, 'Win chance for each matchup, from the weeks played so far. Tap the expected score (categories won, with ties if any) for each category. Schedules and injuries are not factored in.', matchTable(f.matchups.map((m) => ({
     a: { name: m.a, sub: pct(m.p_a), dim: m.p_a < m.p_b }, b: { name: m.b, sub: pct(m.p_b), dim: m.p_b < m.p_a },
-    mid: `${m.expected[0].toFixed(1)}–${m.expected[1].toFixed(1)}`,
+    mid: wholeScore(m).filter((v, i) => i < 2 || v > 0).join('–'),
     detail: d.categories.map((c) => { const x = m.cats[c]; return catRow(fmt(c, x.a), c, fmt(c, x.b), x.p_a > 0.5, x.p_a < 0.5, `${pct(x.p_a)} · ${pct(1 - x.p_a)}`); }) }))));
 }
 
@@ -148,11 +158,59 @@ function picture(d) {
         p.matchups.map(([a, b]) => h('div', { class: 'bracket' }, sd(a), h('span', { class: 'muted' }, 'vs'), h('div', { class: 'r' }, sd(b)))))));
 }
 
+// ---------- the opening page of a season
+const money = (v) => (v == null ? '–' : `Php ${num(v)}`);
+function members(d) {
+  const elo = d.members.some((x) => x.elo);
+  const row = (m) => [td(team(m.manager, m.team), 'l'), td(m.rookie ? h('span', { class: 'chip bubble' }, 'Rookie') : m.seasons), td(m.titles || '–'), td(m.best || '–'), td(m.last || '–'),
+    ...(elo ? [td(m.elo ? [m.elo, h('small', { class: 'muted' }, ` ${(m.elo_tier || '').replace(/^./, (c) => c.toUpperCase())}`)] : '–')] : [])];
+  const head = [{ t: 'Team', l: true }, 'Seasons played', 'Titles', 'Best finish', 'Last season', ...(elo ? ['ELO'] : [])];
+  const rooks = d.members.filter((m) => m.rookie);
+  return h('div', sec('members', 'The league', `${d.teams} teams. ${rooks.length} rookie${rooks.length === 1 ? '' : 's'} this season.`, tbl(head, d.members.map(row)), true),
+    h('p', { class: 'note' }, 'Seasons played counts every year since a manager joined, including the cancelled 2019-20 season.'));
+}
+function champions(d) {
+  const t = d.titles.map(([m, n]) => h('span', { class: 'chip win' }, `${m} ${n}`));
+  return sec('champions', 'List of champions', `${d.titles.length} different managers have won it all.`, h('div', h('div', { class: 'chips', style: 'margin:0 0 14px' }, t),
+    tbl(['Season', 'NBA season', { t: 'Champion', l: true }], d.champions.map((c) => [td(c.idx), td(c.season), td(c.champion && !c.champion.startsWith('-') ? h('b', c.champion) : h('span', { class: 'muted' }, c.champion ? 'Cancelled' : '???'), 'l')]))));
+}
+function format(d) {
+  const f = d.format; const m = d.money;
+  const tile = (k, v) => h('div', { class: 'tile' }, h('small', k), h('b', v));
+  return sec('format', 'Format and prizes', null, h('div', h('div', { class: 'tiles' }, tile('Format', `${f.categories.length}-category head-to-head`), tile('Regular season', `Through week ${f.regular_season_end}`),
+    tile('Playoffs', `From week ${f.playoff_start}, top ${f.playoff_teams}`), tile('Entry fee', money(m.entry_fee)), tile('Total pot', money(m.pot))),
+    h('p', { class: 'muted', style: 'margin:14px 2px 18px' }, f.categories.join(', ')),
+    tbl([{ t: 'Prize', l: true }, 'Amount'], [...m.season.map((x) => [td(x.place, 'l'), td(money(x.prize))]), [td('Special awards (total)', 'l'), td(money(m.special))]])));
+}
+function introAwards(d) {
+  return sec('awards', 'Special awards', 'Decided on regular-season totals.', tbl([{ t: 'Award', l: true }, { t: 'Description', l: true }, 'Prize'], d.money.awards.map((a) => [td(h('b', a.award), 'l'), td(a.description, 'l'), td(money(a.prize))])), true);
+}
+async function showIntro(seasonEntry) {
+  const app = $('#app');
+  let d; let md = null;
+  try { [d, md] = await Promise.all([get(`data/${state.season}/intro.json`), get(`content/${state.season}/intro.md`, false).catch(() => null)]); }
+  catch (e) { app.replaceChildren(h('p', { class: 'center muted' }, "Couldn't load this page.")); return; }
+  const [first, ...rest] = seasonEntry.intro.headline.split(/(?<=:)\s+/);
+  const parts = [[md ? 'welcome' : null, 'Welcome'], ['members', 'The league'], ['champions', 'Champions'], ['format', 'Format and prizes'], ['awards', 'Awards']].filter((x) => x[0]);
+  app.replaceChildren(h('div', { class: 'page' },
+    h('div', { class: 'hero' }, h('p', { class: 'eyebrow' }, `${seasonEntry.label} · Season ${d.number}`), h('h1', first, rest.length ? [' ', h('span', rest.join(' '))] : null), chips(seasonEntry)),
+    h('nav', { class: 'jump' }, parts.map(([id, label]) => h('a', { href: `#${id}`, onclick: (e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView(); } }, label))),
+    md ? h('section', { id: 'welcome' }, h('div', { class: 'card' }, h('div', { class: 'writeup' }, markdown(md)))) : null,
+    members(d), champions(d), format(d), introAwards(d)));
+  window.scrollTo({ top: 0 });
+  $('#foot').textContent = seasonEntry.label;
+  document.title = `${state.man.title} · ${seasonEntry.label} · The beginning`;
+  syncControls();
+}
+
+const pages = (s) => (s.intro ? [{ week: 0, label: s.intro.label }] : []).concat(s.weeks);
+const chips = (s) => h('div', { class: 'chips' }, pages(s).map((w) => h('a', { href: `#/${s.id}/${w.week}`, class: `${w.week === state.week ? 'sel' : ''} ${w.week > (s.regular_season_end || 99) ? 'po' : ''}` }, w.week === 0 ? 'Intro' : w.week)));
+
 // ---------- page
 async function show() {
   const app = $('#app');
   const seasonEntry = state.man.seasons.find((s) => s.id === state.season);
-  const sw = seasonEntry.weeks.find((w) => w.week === state.week);
+  if (state.week === 0) return showIntro(seasonEntry);
   let data; let md = null;
   try { [data, md] = await Promise.all([get(`data/${state.season}/week-${pad(state.week)}.json`), get(`content/${state.season}/week-${pad(state.week)}.md`, false).catch(() => null)]); }
   catch (e) { app.replaceChildren(h('p', { class: 'center muted' }, `Couldn't load week ${state.week}.`)); return; }
@@ -166,7 +224,7 @@ async function show() {
     h('div', { class: 'hero' }, h('p', { class: 'eyebrow' }, `${seasonEntry.label} · Week ${state.week}${dates ? ' · ' + dates : ''}`),
       h('h1', first, rest.length ? [' ', h('span', rest.join(' '))] : null),
       h('p', { class: 'sub' }, `${data.standings[0].manager} leads the standings with ${num(data.standings[0].points, 1)} points.`),
-      h('div', { class: 'chips' }, seasonEntry.weeks.map((w) => h('a', { href: `#/${state.season}/${w.week}`, class: `${w.week === state.week ? 'sel' : ''} ${w.week > (seasonEntry.regular_season_end || 99) ? 'po' : ''}` }, w.week)))),
+      chips(seasonEntry)),
     h('nav', { class: 'jump' }, parts.map(([id, label]) => h('a', { href: `#${id}`, onclick: (e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView(); } }, label))),
     md ? h('section', { id: 'review' }, h('div', { class: 'sec-head' }, h('h2', 'Week in review')), h('div', { class: 'card' }, h('div', { class: 'writeup' }, markdown(md)))) : h('section', { id: 'review' }, h('div', { class: 'card' }, h('p', { class: 'pending' }, 'The write-up for this week is coming soon. The numbers are below.'))),
     forecast(data), standings(data), results(data), stats(data), matrix(data), awards(data), projections(data), picture(data));
@@ -180,10 +238,10 @@ async function show() {
 function syncControls() {
   const s = state.man.seasons.find((x) => x.id === state.season);
   $('#season').value = state.season;
-  $('#week').replaceChildren(...s.weeks.map((w) => h('option', { value: w.week }, w.label)));
+  $('#week').replaceChildren(...pages(s).map((w) => h('option', { value: w.week }, w.label)));
   $('#week').value = state.week;
-  const i = s.weeks.findIndex((w) => w.week === state.week);
-  $('#prev').disabled = i <= 0; $('#next').disabled = i >= s.weeks.length - 1;
+  const i = pages(s).findIndex((w) => w.week === state.week);
+  $('#prev').disabled = i <= 0; $('#next').disabled = i >= pages(s).length - 1;
 }
 
 const go = (season, week) => { location.hash = `#/${season}/${week}`; };
@@ -191,7 +249,7 @@ function route() {
   const m = /^#\/([^/]+)\/(\d+)/.exec(location.hash);
   let season = m && state.man.seasons.find((s) => s.id === m[1]) ? m[1] : state.man.seasons[0].id;
   const s = state.man.seasons.find((x) => x.id === season);
-  let week = m && s.weeks.find((w) => w.week === +m[2]) ? +m[2] : s.weeks[s.weeks.length - 1].week;
+  let week = m && pages(s).find((w) => w.week === +m[2]) ? +m[2] : pages(s)[pages(s).length - 1].week;
   if (!m || season !== m[1] || week !== +m[2]) { history.replaceState(null, '', `#/${season}/${week}`); }
   state.season = season; state.week = week;
   show();
@@ -212,9 +270,9 @@ function theme() {
   if (!state.man.seasons.length) { $('#app').replaceChildren(h('p', { class: 'center muted' }, 'No updates published yet.')); return; }
   $('#site-title').textContent = state.man.title;
   $('#season').replaceChildren(...state.man.seasons.map((s) => h('option', { value: s.id }, s.label)));
-  $('#season').onchange = (e) => { const s = state.man.seasons.find((x) => x.id === e.target.value); go(s.id, s.weeks[s.weeks.length - 1].week); };
+  $('#season').onchange = (e) => { const s = state.man.seasons.find((x) => x.id === e.target.value); go(s.id, pages(s)[pages(s).length - 1].week); };
   $('#week').onchange = (e) => go(state.season, +e.target.value);
-  const step = (d) => { const s = state.man.seasons.find((x) => x.id === state.season); const i = s.weeks.findIndex((w) => w.week === state.week) + d; if (s.weeks[i]) go(state.season, s.weeks[i].week); };
+  const step = (d) => { const s = state.man.seasons.find((x) => x.id === state.season); const p = pages(s); const i = p.findIndex((w) => w.week === state.week) + d; if (p[i]) go(state.season, p[i].week); };
   $('#prev').onclick = () => step(-1); $('#next').onclick = () => step(1);
   window.addEventListener('hashchange', route);
   route();
