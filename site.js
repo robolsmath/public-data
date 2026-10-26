@@ -14,7 +14,6 @@ const get = async (url, json = true) => { const r = await fetch(url, { cache: 'n
 const pad = (n) => String(n).padStart(2, '0');
 const num = (v, d = 0) => Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const pct = (p, d = 0) => `${(p * 100).toFixed(d)}%`;
-const ini = (n) => { const w = String(n).trim().split(/\s+/); return (w.length > 1 ? w[0][0] + w[1][0] : w[0].slice(0, 2)).toUpperCase(); };
 const state = { man: null, season: null, week: null, data: null };
 
 // ---------- a very small markdown reader (headings, lists with nesting, quotes, bold/italic/links)
@@ -52,7 +51,7 @@ function markdown(src) {
 const isPct = (c) => state.data.percent.includes(c);
 const fmt = (c, v) => (v == null ? '–' : isPct(c) ? v.toFixed(3).replace(/^0/, '') : Number.isInteger(v) ? String(v) : v.toFixed(1));
 const heat = (rank, n = 12) => { const t = n > 1 ? (rank - 1) / (n - 1) : 0.5; return t < 0.5 ? `background:rgba(52,199,89,${((0.5 - t) * 0.42).toFixed(2)})` : `background:rgba(255,59,48,${((t - 0.5) * 0.34).toFixed(2)})`; };
-const team = (m, t, small = false) => h('span', { class: 'team' }, h('span', { class: 'av', style: small ? 'width:22px;height:22px;font-size:9px' : '' }, ini(m)), h('span', { class: 'nm' }, h('b', m), t && t !== m ? h('small', t) : null));
+const team = (m, t) => h('span', { class: 'team' }, h('span', { class: 'nm' }, h('b', m), t && t !== m ? h('small', t) : null));
 const rankBadge = (r) => h('span', { class: `rank${r <= 3 ? ' r' + r : ''}` }, r);
 const awardValue = (a, v) => (typeof v !== 'number' ? v : a === 'Mr. Efficiency' ? pct(v, 1) : a === 'Point God' ? v.toFixed(2) : num(v));
 
