@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>League Updates</title>
+  <script>
+    try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/" id="brand"><span class="mark" aria-hidden="true"></span><span id="site-title">League Updates</span></a>
+    <div class="pickers">
+      <label class="sr" for="season">Season</label><select id="season" aria-label="Season"></select>
+      <div class="stepper">
+        <button id="prev" aria-label="Previous week" title="Previous week">‹</button>
+        <label class="sr" for="week">Week</label><select id="week" aria-label="Week"></select>
+        <button id="next" aria-label="Next week" title="Next week">›</button>
+      </div>
+      <button id="theme" class="round" aria-label="Toggle light or dark" title="Light / dark"></button>
+    </div>
+  </header>
+  <main id="app"><p class="muted center">Loading…</p></main>
+  <footer id="foot"></footer>
+  <noscript><p class="center">This page needs JavaScript to show the weekly updates.</p></noscript>
+  <script src="site.js" type="module"></script>
+</body>
+</html>
